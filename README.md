@@ -51,6 +51,13 @@ Display the payment form with default amount ($1.00):
 [stripe_payment]
 ```
 
+### Subscription Shortcode (Required IDs)
+For subscriptions to work with Zapier, you MUST include the Stripe Price ID from your Stripe Dashboard:
+
+```
+[stripe_payment subscription="true" price_id="price_123456789"]
+```
+
 ### Shortcode with Custom Amount
 
 Display the payment form with a custom amount:
