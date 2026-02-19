@@ -178,7 +178,9 @@ public function payment_form_shortcode($atts) {
             'is_subscription' => false,
             'amount' => $amount,
             'amount_cents' => $amount_cents,
-            'currency' => $currency
+            'currency' => $currency,
+            'product_id' => sanitize_text_field($atts['product_id']),
+            'price_id' => sanitize_text_field($atts['price_id'])
         );
         extract($template_vars);
         include STRIPE_PAYMENT_PLUGIN_DIR . 'templates/payment-form.php';
