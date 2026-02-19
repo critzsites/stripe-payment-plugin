@@ -270,6 +270,8 @@ class Stripe_Payment_Admin_Settings {
             <h2>Shortcode Usage</h2>
             <p>Use the following shortcode to display the payment form on any page or post:</p>
             <code>[stripe_payment]</code>
+            <p>For subscriptions to work with Zapier, you MUST include the Stripe 'Price ID' and 'Product ID' from your Stripe Dashboard:</p>
+            <code>[stripe_payment subscription="true" product_id="prod_ABC" price_id="price_123"]</code>
             <p>Or with custom amount:</p>
             <code>[stripe_payment amount="25.00"]</code>
             <p>Or with custom amount and currency:</p>
