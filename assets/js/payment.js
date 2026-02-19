@@ -241,6 +241,7 @@
         const annualAmount = parseInt($('#annual-amount').val());
         const noTrial = $('#no-trial').val() === '1';
         const currency = $('#payment-currency').val();
+        const priceId = $('#stripe-price-id').val();
         
         // Create subscription setup
         const response = await $.ajax({
@@ -252,6 +253,7 @@
                 trial_days: trialDays,
                 annual_amount: annualAmount,
                 currency: currency,
+                price_id: priceId,
                 nonce: stripePayment.nonce
             }
         });
