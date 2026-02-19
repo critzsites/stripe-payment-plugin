@@ -420,7 +420,7 @@ public function confirm_subscription() {
     
     if ($no_trial || intval($trial_days) <= 0) {
         // Charge immediately; the client will confirm the invoice payment intent if required
-        $subscription_body_params['payment_behavior'] = 'default_incomplete';
+        $subscription_body_params['payment_behavior'] = 'allow_incomplete';
         $subscription_body_params['payment_settings[save_default_payment_method]'] = 'on_subscription';
     } else {
         $subscription_body_params['trial_period_days'] = $trial_days;
