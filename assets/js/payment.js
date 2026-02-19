@@ -344,8 +344,7 @@
                 const invoicePiClientSecret = subscriptionResponse.data?.invoicePaymentIntentClientSecret;
                 if (invoicePiClientSecret) {
                     const { error: invoiceError, paymentIntent: invoicePI } = await stripe.confirmCardPayment(
-                        invoicePiClientSecret,
-                        { payment_method: setupIntent.payment_method }
+                        invoicePiClientSecret
                     );
                     
                     if (invoiceError) {
