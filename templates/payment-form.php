@@ -406,6 +406,8 @@ $formatted_amount = number_format($amount, 2);
                     
                     <input type="hidden" id="payment-amount" value="<?php echo esc_attr($amount_cents); ?>">
                     <input type="hidden" id="payment-currency" value="<?php echo esc_attr($currency); ?>">
+                    <input type="hidden" id="stripe-product-id" value="<?php echo esc_attr($product_id); ?>">
+                    <input type="hidden" id="stripe-price-id" value="<?php echo esc_attr($price_id); ?>">
                     <input type="hidden" id="is-subscription" value="<?php echo isset($is_subscription) && $is_subscription ? '1' : '0'; ?>">
                     <?php if (isset($is_subscription) && $is_subscription): ?>
                     <input type="hidden" id="no-trial" value="<?php echo (isset($no_trial) && $no_trial) ? '1' : '0'; ?>">
