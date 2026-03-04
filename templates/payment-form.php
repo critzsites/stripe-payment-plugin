@@ -87,12 +87,9 @@ $formatted_amount = number_format($amount, 2);
             <div class="payment-section">
                 <h3 class="express-checkout-title">EXPRESS CHECKOUT</h3>
             </div>
-            
-            <div class="payment-section express-checkout-buttons">
-                <div class="image-wrapper">
-                    <img src="https://corymuscara.com/wp-content/uploads/2026/01/pay.png" width="225" height="60" alt="Apple Pay">
-                    <img src="https://corymuscara.com/wp-content/uploads/2026/01/gpay.png" width="225" height="60" alt="Google Pay">
-                </div>
+
+            <div class="payment-section express-checkout-buttons" id="express-checkout-wrapper" style="display: none;">
+                <div id="payment-request-button"></div>
             </div>
             
             <div class="payment-section">
