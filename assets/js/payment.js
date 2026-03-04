@@ -85,47 +85,49 @@
 
         // 4. Handle the Authentication
         paymentRequest.on('paymentmethod', async function(ev) {
-            // User successfully authorized via FaceID / Fingerprint!
+            // User successfully authorized!
+            console.log("1. Google Pay Token Received!", ev);
+            
             const priceId = $('#stripe-price-id').val();
             
             try {
-                // Send the generated token directly to your existing PHP subscription function
                 const subscriptionResponse = await $.ajax({
                     url: stripePayment.ajaxUrl,
                     type: 'POST',
                     data: {
                         action: 'stripe_confirm_subscription',
-                        payment_method_id: ev.paymentMethod.id, // The Apple/Google Pay Token
+                        payment_method_id: ev.paymentMethod.id, 
                         price_id: priceId,
                         trial_amount: parseInt($('#trial-amount').val()) || 0,
                         trial_days: parseInt($('#trial-days').val()) || 30,
                         no_trial: noTrial ? '1' : '0',
                         currency: $('#payment-currency').val(),
-                        // Map the digital wallet's data to your required fields
-                        customer_email: ev.payerEmail,
-                        customer_name: ev.payerName,
-                        customer_phone: ev.payerPhone,
+                        // THE FIX: Fallbacks! If Google doesn't send a name/email, use the form fields
+                        customer_email: ev.payerEmail || $('#email').val() || 'digitalwallet@example.com',
+                        customer_name: ev.payerName || $('#full-name').val() || 'Digital Wallet User',
+                        customer_phone: ev.payerPhone || $('#phone').val() || '',
                         nonce: stripePayment.nonce
                     }
                 });
-
+                
+                console.log("2. Server Response:", subscriptionResponse);
+                
                 if (subscriptionResponse.success) {
-                    // Tell the Apple/Google Pay UI it was successful (Shows the green checkmark)
                     ev.complete('success');
-                    
                     showMessage('Subscription created successfully! Thank you.', 'success');
                     
                     if (stripePayment.thankYouPage && stripePayment.thankYouPage.trim() !== '') {
                         setTimeout(() => window.location.href = stripePayment.thankYouPage, 1500);
                     }
                 } else {
-                    // Tell the Apple/Google Pay UI it failed
-                    ev.complete('fail');
-                    showMessage(subscriptionResponse.data?.message || 'Failed to create subscription.', 'error');
+                    // THIS IS WHAT TRIGGERS THE OR_BIBED_08 ERROR
+                    ev.complete('fail'); 
+                    showMessage(subscriptionResponse.data?.message || 'Backend failed to create subscription.', 'error');
                 }
             } catch (error) {
+                console.error("3. AJAX Error:", error);
                 ev.complete('fail');
-                showMessage('An error occurred processing your digital wallet.', 'error');
+                showMessage('Server connection error.', 'error');
             }
         });
         
