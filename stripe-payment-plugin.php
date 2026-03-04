@@ -3,7 +3,7 @@
 * Plugin Name: Stripe Payment Plugin
 * Plugin URI: https://www.dynamicdreamz.com/
 * Description: A beautiful Stripe payment plugin with shortcode support and admin settings
-* Version: 1.0.2
+* Version: 1.0.3
 * Author: Dynamic Dreamz
 * Author URI: https://www.dynamicdreamz.com/
 * License: GPL v2 or later
@@ -16,7 +16,7 @@ exit;
 }
 
 // Define plugin constants
-define('STRIPE_PAYMENT_PLUGIN_VERSION', '1.0.2');
+define('STRIPE_PAYMENT_PLUGIN_VERSION', '1.0.3');
 define('STRIPE_PAYMENT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('STRIPE_PAYMENT_PLUGIN_URL', plugin_dir_url(__FILE__));
 
