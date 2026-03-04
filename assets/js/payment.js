@@ -43,6 +43,91 @@
         });
         
         cardElement.mount('#card-element');
+
+        // ---------------------------------------------------------
+        // APPLE PAY & GOOGLE PAY (Payment Request Button)
+        // ---------------------------------------------------------
+        const isSubscription = $('#is-subscription').val() === '1';
+        const noTrial = $('#no-trial').val() === '1';
+        let prAmount = isSubscription 
+            ? (noTrial ? parseInt($('#annual-amount').val()) : parseInt($('#trial-amount').val()))
+            : parseInt($('#payment-amount').val());
+
+        // 1. Configure the Payment Request
+        const paymentRequest = stripe.paymentRequest({
+            country: 'US', // Update this if your merchant account is based elsewhere
+            currency: $('#payment-currency').val().toLowerCase() || 'usd',
+            total: {
+                label: 'Total Due Today',
+                amount: prAmount > 0 ? prAmount : 0, 
+            },
+            requestPayerName: true,
+            requestPayerEmail: true,
+            requestPayerPhone: true,
+        });
+
+        // 2. Create the Element
+        const prButton = elements.create('paymentRequestButton', {
+            paymentRequest: paymentRequest,
+        });
+
+        // 3. Check if device supports Apple/Google Pay
+        paymentRequest.canMakePayment().then(function(result) {
+            if (result) {
+                prButton.mount('#payment-request-button');
+                $('#express-checkout-wrapper').show();
+            } else {
+                // If not supported (e.g., an older browser), hide the Express Checkout area completely
+                $('#express-checkout-wrapper').hide();
+                $('.express-checkout-title').hide();
+            }
+        });
+
+        // 4. Handle the Authentication
+        paymentRequest.on('paymentmethod', async function(ev) {
+            // User successfully authorized via FaceID / Fingerprint!
+            const priceId = $('#stripe-price-id').val();
+            
+            try {
+                // Send the generated token directly to your existing PHP subscription function
+                const subscriptionResponse = await $.ajax({
+                    url: stripePayment.ajaxUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'stripe_confirm_subscription',
+                        payment_method_id: ev.paymentMethod.id, // The Apple/Google Pay Token
+                        price_id: priceId,
+                        trial_amount: parseInt($('#trial-amount').val()) || 0,
+                        trial_days: parseInt($('#trial-days').val()) || 30,
+                        no_trial: noTrial ? '1' : '0',
+                        currency: $('#payment-currency').val(),
+                        // Map the digital wallet's data to your required fields
+                        customer_email: ev.payerEmail,
+                        customer_name: ev.payerName,
+                        customer_phone: ev.payerPhone,
+                        nonce: stripePayment.nonce
+                    }
+                });
+
+                if (subscriptionResponse.success) {
+                    // Tell the Apple/Google Pay UI it was successful (Shows the green checkmark)
+                    ev.complete('success');
+                    
+                    showMessage('Subscription created successfully! Thank you.', 'success');
+                    
+                    if (stripePayment.thankYouPage && stripePayment.thankYouPage.trim() !== '') {
+                        setTimeout(() => window.location.href = stripePayment.thankYouPage, 1500);
+                    }
+                } else {
+                    // Tell the Apple/Google Pay UI it failed
+                    ev.complete('fail');
+                    showMessage(subscriptionResponse.data?.message || 'Failed to create subscription.', 'error');
+                }
+            } catch (error) {
+                ev.complete('fail');
+                showMessage('An error occurred processing your digital wallet.', 'error');
+            }
+        });
         
         // Handle real-time validation errors
         cardElement.on('change', function(event) {
