@@ -352,6 +352,25 @@ public function confirm_subscription() {
         wp_send_json_error(array('message' => 'Failed to create customer'));
         return;
     }
+
+    // Check if this customer already has an active subscription to this product
+    $subs_response = wp_remote_get('https://api.stripe.com/v1/subscriptions?customer=' . $customer_id . '&status=active', array(
+        'headers' => array('Authorization' => 'Bearer ' . $secret_key)
+    ));
+
+    if (!is_wp_error($subs_response)) {
+        $subs_body = json_decode(wp_remote_retrieve_body($subs_response), true);
+        if (!empty($subs_body['data'])) {
+            foreach ($subs_body['data'] as $sub) {
+                foreach ($sub['items']['data'] as $item) {
+                    if ($item['price']['id'] === $price_id) {
+                        wp_send_json_error(array('message' => 'It looks like you are already subscribed! Please check your email or contact support.'));
+                        return; // Stop the transaction immediately
+                    }
+                }
+            }
+        }
+    }
     
     // Attach payment method to customer
     $attach_response = wp_remote_post('https://api.stripe.com/v1/payment_methods/' . $payment_method_id . '/attach', array(
@@ -519,18 +538,34 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
         return null;
     }
     
-    // Build customer data array
+    $customer_id = null;
+
+    // 1. Search for existing customer by email
+    $search_response = wp_remote_get('https://api.stripe.com/v1/customers?email=' . urlencode($customer_email) . '&limit=1', array(
+        'headers' => array('Authorization' => 'Bearer ' . $secret_key)
+    ));
+
+    if (!is_wp_error($search_response)) {
+        $search_body = json_decode(wp_remote_retrieve_body($search_response), true);
+        if (!empty($search_body['data'])) {
+            $customer_id = $search_body['data'][0]['id'];
+        }
+    }
+
+    // 2. Build the data array (including the phone and metadata we added earlier!)
     $customer_data = array(
         'email' => $customer_email,
         'name' => $customer_name,
+        'metadata' => array(
+            'birthday' => isset($_POST['birthday']) ? sanitize_text_field($_POST['birthday']) : '',
+            'gender'   => isset($_POST['gender']) ? sanitize_text_field($_POST['gender']) : '',
+        )
     );
-    
-    // Add phone (required field) - always include if provided
+
     if (!empty($customer_phone)) {
         $customer_data['phone'] = $customer_phone;
     }
-    
-    // Build address object if address fields are provided
+
     if (!empty($address_line1) && !empty($address_city) && !empty($address_state) && !empty($address_postal_code) && !empty($address_country)) {
         $customer_data['address[line1]'] = $address_line1;
         if (!empty($address_line2)) {
@@ -541,63 +576,32 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
         $customer_data['address[postal_code]'] = $address_postal_code;
         $customer_data['address[country]'] = $address_country;
     }
-    
-    // Create customer
-    $customer_response = wp_remote_post('https://api.stripe.com/v1/customers', array(
-        'headers' => array(
-            'Authorization' => 'Bearer ' . $secret_key,
-            'Content-Type' => 'application/x-www-form-urlencoded',
-        ),
-        'body' => $customer_data,
-    ));
-    
-    if (is_wp_error($customer_response)) {
-        return null;
-    }
-    
-    $customer_body = json_decode(wp_remote_retrieve_body($customer_response), true);
-    
-    if (isset($customer_body['error']) || !isset($customer_body['id'])) {
-        return null;
-    }
-    
-    $customer_id = $customer_body['id'];
-    
-    // Always update customer to ensure phone and address are saved (even if already set during creation)
-    $update_data = array();
-    
-    if (!empty($customer_phone)) {
-        $update_data['phone'] = $customer_phone;
-    }
-    
-    if (!empty($address_line1) && !empty($address_city) && !empty($address_state) && !empty($address_postal_code) && !empty($address_country)) {
-        $update_data['address[line1]'] = $address_line1;
-        if (!empty($address_line2)) {
-            $update_data['address[line2]'] = $address_line2;
-        }
-        $update_data['address[city]'] = $address_city;
-        $update_data['address[state]'] = $address_state;
-        $update_data['address[postal_code]'] = $address_postal_code;
-        $update_data['address[country]'] = $address_country;
-    }
-    
-    // Update customer to ensure phone number is saved
-    if (!empty($update_data)) {
+
+    // 3. Update existing or Create new
+    if ($customer_id) {
         $update_response = wp_remote_post('https://api.stripe.com/v1/customers/' . $customer_id, array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $secret_key,
                 'Content-Type' => 'application/x-www-form-urlencoded',
             ),
-            'body' => $update_data,
+            'body' => $customer_data,
         ));
+        return $customer_id;
+    } else {
+        $customer_response = wp_remote_post('https://api.stripe.com/v1/customers', array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $secret_key,
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ),
+            'body' => $customer_data,
+        ));
+
+        if (is_wp_error($customer_response)) return null;
+        $customer_body = json_decode(wp_remote_retrieve_body($customer_response), true);
+        if (isset($customer_body['error']) || !isset($customer_body['id'])) return null;
         
-        // Log if update fails (but don't fail the whole process)
-        if (is_wp_error($update_response)) {
-            error_log('Failed to update customer phone/address: ' . $update_response->get_error_message());
-        }
+        return $customer_body['id'];
     }
-    
-    return $customer_id;
 }
 
 public static function get_stripe_secret_key() {
