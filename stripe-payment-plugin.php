@@ -20,6 +20,15 @@ define('STRIPE_PAYMENT_PLUGIN_VERSION', '1.0.3');
 define('STRIPE_PAYMENT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('STRIPE_PAYMENT_PLUGIN_URL', plugin_dir_url(__FILE__));
 
+// Increase WordPress HTTP timeout for Stripe API calls
+add_filter('http_request_timeout', function($timeout) {
+    return 15; // Give Stripe 15 seconds to respond instead of 5
+});
+add_filter('http_request_args', function($args) {
+    $args['timeout'] = 15;
+    return $args;
+});
+
 class Stripe_Payment_Plugin {
 
 private static $instance = null;
