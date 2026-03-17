@@ -139,7 +139,8 @@ public function payment_form_shortcode($atts) {
         'trial_days' => '',
         'annual_amount' => '',
         'product_id' => '',
-        'price_id' => ''
+        'price_id' => '',
+        'redirect_url' => ''
     ), $atts);
     
     // Check if subscription mode
@@ -174,7 +175,8 @@ public function payment_form_shortcode($atts) {
             'amount' => $no_trial ? $annual_amount : $trial_amount,
             'amount_cents' => $no_trial ? $annual_amount_cents : $trial_amount_cents,
             'product_id' => sanitize_text_field($atts['product_id']),
-            'price_id' => sanitize_text_field($atts['price_id'])
+            'price_id' => sanitize_text_field($atts['price_id']),
+            'redirect_url' => esc_url_raw($atts['redirect_url'])
         );
         extract($template_vars);
         include STRIPE_PAYMENT_PLUGIN_DIR . 'templates/payment-form.php';
@@ -192,7 +194,8 @@ public function payment_form_shortcode($atts) {
             'amount_cents' => $amount_cents,
             'currency' => $currency,
             'product_id' => sanitize_text_field($atts['product_id']),
-            'price_id' => sanitize_text_field($atts['price_id'])
+            'price_id' => sanitize_text_field($atts['price_id']),
+            'redirect_url' => esc_url_raw($atts['redirect_url'])
         );
         extract($template_vars);
         include STRIPE_PAYMENT_PLUGIN_DIR . 'templates/payment-form.php';
