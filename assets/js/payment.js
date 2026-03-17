@@ -116,11 +116,15 @@
                     ev.complete('success');
                     showMessage('Subscription created successfully! Thank you.', 'success');
                     
-                    if (stripePayment.thankYouPage && stripePayment.thankYouPage.trim() !== '') {
-                        setTimeout(() => window.location.href = stripePayment.thankYouPage, 1500);
+                    // NEW DYNAMIC REDIRECT LOGIC
+                    let customRedirect = $('#custom-redirect-url').val();
+                    let finalUrl = customRedirect ? customRedirect : (stripePayment.thankYouPage ? stripePayment.thankYouPage.trim() : '');
+                    
+                    if (finalUrl !== '') {
+                        const separator = finalUrl.includes('?') ? '&' : '?';
+                        setTimeout(() => window.location.href = finalUrl + separator + 'cus=' + subscriptionResponse.data.customer_id, 1500);
                     }
                 } else {
-                    // THIS IS WHAT TRIGGERS THE OR_BIBED_08 ERROR
                     ev.complete('fail'); 
                     showMessage(subscriptionResponse.data?.message || 'Backend failed to create subscription.', 'error');
                 }
@@ -242,75 +246,78 @@
             }
         });
             
-            if (response.success && response.data.clientSecret) {
-                paymentIntentClientSecret = response.data.clientSecret;
-                
-                // Build address object
-                const address = {
-                    line1: addressLine1,
-                    city: city,
-                    state: state,
-                    postal_code: postalCode,
-                    country: country
-                };
-                
-                // Add line2 if provided
-                if (addressLine2) {
-                    address.line2 = addressLine2;
-                }
-                
-                // Confirm payment with Stripe
-                const {error, paymentIntent} = await stripe.confirmCardPayment(
-                    paymentIntentClientSecret,
-                    {
-                        payment_method: {
-                            card: cardElement,
-                            billing_details: {
-                                name: fullName,
-                                email: email,
-                                phone: phone,
-                                address: address
-                            }
+        if (response.success && response.data.clientSecret) {
+            paymentIntentClientSecret = response.data.clientSecret;
+            
+            // Build address object
+            const address = {
+                line1: addressLine1,
+                city: city,
+                state: state,
+                postal_code: postalCode,
+                country: country
+            };
+            
+            // Add line2 if provided
+            if (addressLine2) {
+                address.line2 = addressLine2;
+            }
+            
+            // Confirm payment with Stripe
+            const {error, paymentIntent} = await stripe.confirmCardPayment(
+                paymentIntentClientSecret,
+                {
+                    payment_method: {
+                        card: cardElement,
+                        billing_details: {
+                            name: fullName,
+                            email: email,
+                            phone: phone,
+                            address: address
                         }
                     }
-                );
-                
-                if (error) {
-                    // Show error message
-                    showMessage(error.message, 'error');
-                    form.removeClass('processing');
-                    submitButton.prop('disabled', false);
-                    buttonText.text('Process Payment');
-                    buttonSpinner.hide();
-                } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-                    // Payment succeeded
-                    await confirmPayment(paymentIntent.id);
-                    
-                    // Reset form
-                    form[0].reset();
-                    cardElement.clear();
-                    
-                    // Reset form state
-                    form.removeClass('processing');
-                    submitButton.prop('disabled', false);
-                    buttonText.text('Process Payment');
-                    buttonSpinner.hide();
-                    
-                    // Check if thank you page is set, then redirect
-                    if (stripePayment.thankYouPage && stripePayment.thankYouPage.trim() !== '') {
-                        // Redirect to thank you page after a short delay
-                        showMessage('Payment successful! Redirecting...', 'success');
-                        setTimeout(function() {
-                            window.location.href = stripePayment.thankYouPage;
-                        }, 1500);
-                    } else {
-                        // Show success message on same page
-                        showMessage('Payment successful! Thank you for your purchase.', 'success');
-                    }
                 }
-            } else {
-                throw new Error(response.data?.message || 'Failed to create payment intent');
+            );
+            
+            if (error) {
+                // Show error message
+                showMessage(error.message, 'error');
+                form.removeClass('processing');
+                submitButton.prop('disabled', false);
+                buttonText.text('Process Payment');
+                buttonSpinner.hide();
+            } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+                // Payment succeeded
+                await confirmPayment(paymentIntent.id);
+                
+                // Reset form
+                form[0].reset();
+                cardElement.clear();
+                
+                // Reset form state
+                form.removeClass('processing');
+                submitButton.prop('disabled', false);
+                buttonText.text('Process Payment');
+                buttonSpinner.hide();
+                
+                // NEW DYNAMIC REDIRECT LOGIC
+                let customRedirect = $('#custom-redirect-url').val();
+                let finalUrl = customRedirect ? customRedirect : (stripePayment.thankYouPage ? stripePayment.thankYouPage.trim() : '');
+                
+                if (finalUrl !== '') {
+                    showMessage('Payment successful! Redirecting...', 'success');
+                    const separator = finalUrl.includes('?') ? '&' : '?';
+                    setTimeout(function() {
+                        window.location.href = finalUrl + separator + 'cus=' + response.data.customerId;
+                    }, 1500);
+                } else {
+                    // Show success message on same page
+                    showMessage('Payment successful! Thank you for your purchase.', 'success');
+                }
             }
+        } else {
+            throw new Error(response.data?.message || 'Failed to create payment intent');
+        }
     }
     
     /**
@@ -466,10 +473,14 @@
                 buttonText.text('Process Payment');
                 buttonSpinner.hide();
                 
-                // Check if thank you page is set, then redirect
-                if (stripePayment.thankYouPage && stripePayment.thankYouPage.trim() !== '') {
+                // NEW DYNAMIC REDIRECT LOGIC
+                let customRedirect = $('#custom-redirect-url').val();
+                let finalUrl = customRedirect ? customRedirect : (stripePayment.thankYouPage ? stripePayment.thankYouPage.trim() : '');
+                
+                if (finalUrl !== '') {
+                    const separator = finalUrl.includes('?') ? '&' : '?';
                     setTimeout(function() {
-                        window.location.href = stripePayment.thankYouPage;
+                        window.location.href = finalUrl + separator + 'cus=' + subscriptionResponse.data.customer_id;
                     }, 1500);
                 }
             } else {
@@ -595,4 +606,3 @@
     }
     
 })(jQuery);
-
