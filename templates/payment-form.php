@@ -412,6 +412,7 @@ $formatted_amount = number_format($amount, 2);
                     <input type="hidden" id="trial-days" value="<?php echo esc_attr($trial_days); ?>">
                     <input type="hidden" id="annual-amount" value="<?php echo esc_attr($annual_amount_cents); ?>">
                     <?php endif; ?>
+                    <input type="hidden" id="custom-redirect-url" value="<?php echo esc_attr(isset($redirect_url) ? $redirect_url : ''); ?>">
                     
                     <button type="submit" id="submit-button" class="submit-button">
                         <span class="button-text">Process Payment</span>
