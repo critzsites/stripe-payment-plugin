@@ -662,6 +662,7 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
                 'off_session' => 'true', // This tells Stripe the user isn't entering a CVC
                 'confirm' => 'true',
                 'description' => '1-Click Upsell: Daily Wisdom Library',
+                'metadata[product_id]' => $product_id
             ),
         ));
     
