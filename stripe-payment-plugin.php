@@ -71,6 +71,9 @@ public function init() {
     
     add_action('wp_ajax_stripe_confirm_payment', array($this, 'confirm_payment'));
     add_action('wp_ajax_nopriv_stripe_confirm_payment', array($this, 'confirm_payment'));
+
+    add_action('wp_ajax_stripe_process_1_click_upsell', array($this, 'process_1_click_upsell'));
+    add_action('wp_ajax_nopriv_stripe_process_1_click_upsell', array($this, 'process_1_click_upsell'));
 }
 
 public function activate() {
@@ -612,6 +615,62 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
         return $customer_body['id'];
     }
 }
+
+    public function process_1_click_upsell() {
+        $customer_id = isset($_POST['customer_id']) ? sanitize_text_field($_POST['customer_id']) : '';
+        $amount = isset($_POST['amount']) ? intval($_POST['amount']) : 0;
+        
+        if (empty($customer_id) || $amount <= 0) {
+            wp_send_json_error(array('message' => 'Invalid data provided.'));
+            return;
+        }
+    
+        $secret_key = self::get_stripe_secret_key();
+    
+        // 1. Get the customer's vaulted payment method
+        $pm_response = wp_remote_get('https://api.stripe.com/v1/payment_methods?customer=' . $customer_id . '&type=card', array(
+            'headers' => array('Authorization' => 'Bearer ' . $secret_key)
+        ));
+    
+        if (is_wp_error($pm_response)) {
+            wp_send_json_error(array('message' => 'Could not connect to Stripe.'));
+            return;
+        }
+    
+        $pm_body = json_decode(wp_remote_retrieve_body($pm_response), true);
+        if (empty($pm_body['data'])) {
+            wp_send_json_error(array('message' => 'No card on file for this customer.'));
+            return;
+        }
+    
+        $payment_method_id = $pm_body['data'][0]['id'];
+    
+        // 2. Process the 1-Click Off-Session Charge
+        $charge_response = wp_remote_post('https://api.stripe.com/v1/payment_intents', array(
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $secret_key,
+                'Content-Type' => 'application/x-www-form-urlencoded',
+            ),
+            'body' => array(
+                'amount' => $amount,
+                'currency' => 'usd',
+                'customer' => $customer_id,
+                'payment_method' => $payment_method_id,
+                'off_session' => 'true', // This tells Stripe the user isn't entering a CVC
+                'confirm' => 'true',
+                'description' => '1-Click Upsell: Daily Wisdom Library',
+            ),
+        ));
+    
+        $charge_body = json_decode(wp_remote_retrieve_body($charge_response), true);
+    
+        if (isset($charge_body['error'])) {
+            wp_send_json_error(array('message' => $charge_body['error']['message']));
+            return;
+        }
+    
+        wp_send_json_success(array('message' => 'Daily Wisdom Library purchase successful!'));
+    }
 
 public static function get_stripe_secret_key() {
     $mode = get_option('stripe_payment_mode', 'test');
