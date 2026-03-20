@@ -923,9 +923,13 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
         }
 
         $purchases = array();
+        
+        // NEW: Only look for purchases made in the last 2 hours (7200 seconds)
+        $time_window = time() - 7200; 
 
-        // 2. Get the Subscription (Daily Texts)
-        $subs_response = wp_remote_get('https://api.stripe.com/v1/subscriptions?customer=' . $customer_id . '&status=active', array(
+        // 2. Get the Subscription (Filtered by time)
+        $subs_url = 'https://api.stripe.com/v1/subscriptions?customer=' . $customer_id . '&status=active&created[gte]=' . $time_window;
+        $subs_response = wp_remote_get($subs_url, array(
             'headers' => array('Authorization' => 'Bearer ' . $secret_key)
         ));
         $subs_body = json_decode(wp_remote_retrieve_body($subs_response), true);
@@ -940,18 +944,19 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
             }
         }
 
-        // 3. Get the One-Time Upsells
-        $pi_response = wp_remote_get('https://api.stripe.com/v1/payment_intents?customer=' . $customer_id, array(
+        // 3. Get the One-Time Upsells (Filtered by time)
+        $pi_url = 'https://api.stripe.com/v1/payment_intents?customer=' . $customer_id . '&created[gte]=' . $time_window;
+        $pi_response = wp_remote_get($pi_url, array(
             'headers' => array('Authorization' => 'Bearer ' . $secret_key)
         ));
         $pi_body = json_decode(wp_remote_retrieve_body($pi_response), true);
 
         if (!empty($pi_body['data'])) {
             foreach ($pi_body['data'] as $pi) {
-                // Only grab successful payments that are explicitly from our upsell funnels
+                // Only grab successful payments explicitly from our upsell funnels
                 if ($pi['status'] === 'succeeded' && strpos($pi['description'], '1-Click Upsell') !== false) {
                     $purchases[] = array(
-                        'name' => str_replace('1-Click Upsell: ', '', $pi['description']), // Clean up the name
+                        'name' => str_replace('1-Click Upsell: ', '', $pi['description']), 
                         'amount' => number_format($pi['amount'] / 100, 2),
                         'currency' => strtoupper($pi['currency'])
                     );
