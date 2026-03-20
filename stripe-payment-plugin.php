@@ -684,7 +684,10 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
     public function check_kit_tag_for_upsell() {
         $customer_id = isset($_POST['customer_id']) ? sanitize_text_field($_POST['customer_id']) : '';
         $tag_id = isset($_POST['tag_id']) ? sanitize_text_field($_POST['tag_id']) : '';
-        $kit_api_secret = 'wCB8viFk7POOCo2lTvAvM7pXpsspvXWLwe0NNuEYAqs'; // Keep this safe!
+        
+        // Kit Keys
+        $kit_api_secret = 'wCB8viFk7POOCo2lTvAvM7pXpsspvXWLwe0NNuEYAqs'; 
+        $kit_api_key = '3Yf2QN8c_WDidPjsy5Sp-A'; 
         
         if (empty($customer_id) || empty($tag_id)) {
             wp_send_json_error(array('message' => 'Missing customer ID or tag ID.'));
@@ -693,6 +696,7 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
 
         $stripe_secret_key = self::get_stripe_secret_key();
 
+        // 1. Get email from Stripe
         $customer_response = wp_remote_get('https://api.stripe.com/v1/customers/' . $customer_id, array(
             'headers' => array('Authorization' => 'Bearer ' . $stripe_secret_key)
         ));
@@ -710,19 +714,40 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
             return;
         }
 
-        $kit_url = 'https://api.convertkit.com/v3/subscribers?api_secret=' . $kit_api_secret . '&email_address=' . urlencode($email);
-        $kit_response = wp_remote_get($kit_url);
+        // 2. Search Kit for the Subscriber ID using their email
+        $kit_search_url = 'https://api.convertkit.com/v3/subscribers?api_secret=' . $kit_api_secret . '&email_address=' . urlencode($email);
+        $kit_search_response = wp_remote_get($kit_search_url);
 
-        if (is_wp_error($kit_response)) {
+        if (is_wp_error($kit_search_response)) {
             wp_send_json_error(array('message' => 'Could not connect to Kit.'));
             return;
         }
 
-        $kit_body = json_decode(wp_remote_retrieve_body($kit_response), true);
+        $kit_search_body = json_decode(wp_remote_retrieve_body($kit_search_response), true);
+        
+        // If they aren't in Kit yet, they definitely don't have the tag
+        if (empty($kit_search_body['subscribers']) || !isset($kit_search_body['subscribers'][0]['id'])) {
+            wp_send_json_success(array('has_tag' => false));
+            return;
+        }
+
+        $subscriber_id = $kit_search_body['subscribers'][0]['id'];
+
+        // 3. Ask Kit for the specific tags belonging to this Subscriber ID
+        $kit_tags_url = 'https://api.convertkit.com/v3/subscribers/' . $subscriber_id . '/tags?api_key=' . $kit_api_key;
+        $kit_tags_response = wp_remote_get($kit_tags_url);
+
+        if (is_wp_error($kit_tags_response)) {
+            wp_send_json_error(array('message' => 'Could not retrieve tags from Kit.'));
+            return;
+        }
+
+        $kit_tags_body = json_decode(wp_remote_retrieve_body($kit_tags_response), true);
         $has_tag = false;
 
-        if (!empty($kit_body['subscribers'][0]['tags'])) {
-            foreach ($kit_body['subscribers'][0]['tags'] as $tag) {
+        // 4. Check if our target Tag ID is in their list of tags
+        if (!empty($kit_tags_body['tags'])) {
+            foreach ($kit_tags_body['tags'] as $tag) {
                 if ((string)$tag['id'] === $tag_id) {
                     $has_tag = true;
                     break;
