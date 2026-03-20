@@ -56,6 +56,7 @@ public function init() {
     // Register shortcode
     add_shortcode('stripe_payment', array($this, 'payment_form_shortcode'));
     add_shortcode('stripe_upsell_logic', array($this, 'upsell_logic_shortcode'));
+    add_shortcode('stripe_order_summary', array($this, 'order_summary_shortcode'));
     
     // Enqueue scripts and styles
     add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
@@ -78,6 +79,9 @@ public function init() {
 
     add_action('wp_ajax_check_kit_tag_for_upsell', array($this, 'check_kit_tag_for_upsell'));
     add_action('wp_ajax_nopriv_check_kit_tag_for_upsell', array($this, 'check_kit_tag_for_upsell'));
+    
+    add_action('wp_ajax_stripe_get_order_summary', array($this, 'get_order_summary'));
+    add_action('wp_ajax_nopriv_stripe_get_order_summary', array($this, 'get_order_summary'));
 }
 
 public function activate() {
@@ -894,6 +898,160 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
     </script>
     <?php
     return ob_get_clean();
+    }
+
+    public function get_order_summary() {
+        $customer_id = isset($_POST['customer_id']) ? sanitize_text_field($_POST['customer_id']) : '';
+        
+        if (empty($customer_id)) {
+            wp_send_json_error(array('message' => 'No customer ID provided.'));
+            return;
+        }
+
+        $secret_key = self::get_stripe_secret_key();
+
+        // 1. Get the Customer's Name and Email
+        $customer_response = wp_remote_get('https://api.stripe.com/v1/customers/' . $customer_id, array(
+            'headers' => array('Authorization' => 'Bearer ' . $secret_key)
+        ));
+
+        $customer_body = json_decode(wp_remote_retrieve_body($customer_response), true);
+        
+        if (isset($customer_body['error'])) {
+            wp_send_json_error(array('message' => 'Customer not found.'));
+            return;
+        }
+
+        $purchases = array();
+
+        // 2. Get the Subscription (Daily Texts)
+        $subs_response = wp_remote_get('https://api.stripe.com/v1/subscriptions?customer=' . $customer_id . '&status=active', array(
+            'headers' => array('Authorization' => 'Bearer ' . $secret_key)
+        ));
+        $subs_body = json_decode(wp_remote_retrieve_body($subs_response), true);
+
+        if (!empty($subs_body['data'])) {
+            foreach ($subs_body['data'] as $sub) {
+                $purchases[] = array(
+                    'name' => 'Daily Texts Subscription',
+                    'amount' => number_format($sub['plan']['amount'] / 100, 2),
+                    'currency' => strtoupper($sub['plan']['currency'])
+                );
+            }
+        }
+
+        // 3. Get the One-Time Upsells
+        $pi_response = wp_remote_get('https://api.stripe.com/v1/payment_intents?customer=' . $customer_id, array(
+            'headers' => array('Authorization' => 'Bearer ' . $secret_key)
+        ));
+        $pi_body = json_decode(wp_remote_retrieve_body($pi_response), true);
+
+        if (!empty($pi_body['data'])) {
+            foreach ($pi_body['data'] as $pi) {
+                // Only grab successful payments that are explicitly from our upsell funnels
+                if ($pi['status'] === 'succeeded' && strpos($pi['description'], '1-Click Upsell') !== false) {
+                    $purchases[] = array(
+                        'name' => str_replace('1-Click Upsell: ', '', $pi['description']), // Clean up the name
+                        'amount' => number_format($pi['amount'] / 100, 2),
+                        'currency' => strtoupper($pi['currency'])
+                    );
+                }
+            }
+        }
+
+        wp_send_json_success(array(
+            'name' => isset($customer_body['name']) ? $customer_body['name'] : 'Awesome Human',
+            'email' => isset($customer_body['email']) ? $customer_body['email'] : '',
+            'purchases' => $purchases
+        ));
+    }
+
+    public function order_summary_shortcode() {
+        ob_start();
+        ?>
+        <style>
+            .stripe-receipt-box {
+                background: #fff; border: 1px solid #e5e5e5; border-radius: 12px;
+                padding: 30px; max-width: 500px; margin: 0 auto; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }
+            .stripe-receipt-box h3 { margin-top: 0; margin-bottom: 5px; color: #1a1a1a; font-size: 22px; }
+            .stripe-receipt-box p.receipt-email { color: #666; font-size: 14px; margin-bottom: 25px; margin-top: 0; }
+            .receipt-item { display: flex; justify-content: space-between; border-bottom: 1px dashed #e5e5e5; padding: 12px 0; font-size: 15px; color: #333; }
+            .receipt-item:last-child { border-bottom: none; }
+            .receipt-total { display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; color: #1a1a1a; margin-top: 15px; padding-top: 15px; border-top: 2px solid #333; }
+            #receipt-loader { text-align: center; color: #666; padding: 20px 0; }
+        </style>
+
+        <div class="stripe-receipt-box" id="stripe-receipt-wrapper">
+            <div id="receipt-loader">Generating your receipt...</div>
+            <div id="receipt-content" style="display: none;">
+                <h3>Thanks, <span id="receipt-name"></span>!</h3>
+                <p class="receipt-email">A confirmation has been sent to <span id="receipt-email-val"></span></p>
+                
+                <div style="font-weight:600; font-size:12px; text-transform:uppercase; color:#999; margin-bottom: 10px;">Your Purchases</div>
+                <div id="receipt-items-container"></div>
+                
+                <div class="receipt-total">
+                    <span>Total</span>
+                    <span id="receipt-total-val">$0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const customerId = urlParams.get('cus');
+            const wrapper = document.getElementById('stripe-receipt-wrapper');
+            
+            if(!customerId) {
+                wrapper.style.display = 'none'; // Hide if they load the page directly with no ID
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('action', 'stripe_get_order_summary');
+            formData.append('customer_id', customerId);
+
+            fetch('/wp-admin/admin-ajax.php', { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('receipt-loader').style.display = 'none';
+                
+                if(data.success) {
+                    document.getElementById('receipt-content').style.display = 'block';
+                    document.getElementById('receipt-name').innerText = data.data.name.split(' ')[0]; // First name only
+                    document.getElementById('receipt-email-val').innerText = data.data.email;
+                    
+                    const container = document.getElementById('receipt-items-container');
+                    let total = 0;
+
+                    if(data.data.purchases.length === 0) {
+                        container.innerHTML = '<div class="receipt-item">No purchases found.</div>';
+                    } else {
+                        data.data.purchases.forEach(item => {
+                            total += parseFloat(item.amount);
+                            container.innerHTML += `
+                                <div class="receipt-item">
+                                    <span>${item.name}</span>
+                                    <span>$${item.amount}</span>
+                                </div>
+                            `;
+                        });
+                        document.getElementById('receipt-total-val').innerText = '$' + total.toFixed(2);
+                    }
+                } else {
+                    wrapper.innerHTML = '<p style="text-align:center; color:#666;">Could not load order details.</p>';
+                }
+            })
+            .catch(err => {
+                wrapper.style.display = 'none';
+            });
+        });
+        </script>
+        <?php
+        return ob_get_clean();
     }
 
 public static function get_stripe_secret_key() {
