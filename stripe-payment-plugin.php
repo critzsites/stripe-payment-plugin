@@ -55,6 +55,7 @@ public function init() {
     
     // Register shortcode
     add_shortcode('stripe_payment', array($this, 'payment_form_shortcode'));
+    add_shortcode('stripe_upsell_logic', array($this, 'upsell_logic_shortcode'));
     
     // Enqueue scripts and styles
     add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
