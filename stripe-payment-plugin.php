@@ -74,6 +74,9 @@ public function init() {
 
     add_action('wp_ajax_stripe_process_1_click_upsell', array($this, 'process_1_click_upsell'));
     add_action('wp_ajax_nopriv_stripe_process_1_click_upsell', array($this, 'process_1_click_upsell'));
+
+    add_action('wp_ajax_check_kit_tag_for_upsell', array($this, 'check_kit_tag_for_upsell'));
+    add_action('wp_ajax_nopriv_check_kit_tag_for_upsell', array($this, 'check_kit_tag_for_upsell'));
 }
 
 public function activate() {
@@ -622,6 +625,8 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
     public function process_1_click_upsell() {
         $customer_id = isset($_POST['customer_id']) ? sanitize_text_field($_POST['customer_id']) : '';
         $amount = isset($_POST['amount']) ? intval($_POST['amount']) : 0;
+        $product_id = isset($_POST['product_id']) ? sanitize_text_field($_POST['product_id']) : '';
+        $product_name = isset($_POST['product_name']) ? sanitize_text_field($_POST['product_name']) : 'Special Offer';
         
         if (empty($customer_id) || $amount <= 0) {
             wp_send_json_error(array('message' => 'Invalid data provided.'));
@@ -630,7 +635,6 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
     
         $secret_key = self::get_stripe_secret_key();
     
-        // 1. Get the customer's vaulted payment method
         $pm_response = wp_remote_get('https://api.stripe.com/v1/payment_methods?customer=' . $customer_id . '&type=card', array(
             'headers' => array('Authorization' => 'Bearer ' . $secret_key)
         ));
@@ -647,8 +651,8 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
         }
     
         $payment_method_id = $pm_body['data'][0]['id'];
+        $description = '1-Click Upsell: ' . $product_name;
     
-        // 2. Process the 1-Click Off-Session Charge
         $charge_response = wp_remote_post('https://api.stripe.com/v1/payment_intents', array(
             'headers' => array(
                 'Authorization' => 'Bearer ' . $secret_key,
@@ -659,9 +663,9 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
                 'currency' => 'usd',
                 'customer' => $customer_id,
                 'payment_method' => $payment_method_id,
-                'off_session' => 'true', // This tells Stripe the user isn't entering a CVC
+                'off_session' => 'true', 
                 'confirm' => 'true',
-                'description' => '1-Click Upsell: Daily Wisdom Library',
+                'description' => $description,
                 'metadata[product_id]' => $product_id
             ),
         ));
@@ -673,7 +677,179 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
             return;
         }
     
-        wp_send_json_success(array('message' => 'Daily Wisdom Library purchase successful!'));
+        wp_send_json_success(array('message' => 'Purchase successful!'));
+    }
+
+    public function check_kit_tag_for_upsell() {
+        $customer_id = isset($_POST['customer_id']) ? sanitize_text_field($_POST['customer_id']) : '';
+        $tag_id = isset($_POST['tag_id']) ? sanitize_text_field($_POST['tag_id']) : '';
+        $kit_api_secret = 'wCB8viFk7POOCo2lTvAvM7pXpsspvXWLwe0NNuEYAqs'; // Keep this safe!
+        
+        if (empty($customer_id) || empty($tag_id)) {
+            wp_send_json_error(array('message' => 'Missing customer ID or tag ID.'));
+            return;
+        }
+
+        $stripe_secret_key = self::get_stripe_secret_key();
+
+        $customer_response = wp_remote_get('https://api.stripe.com/v1/customers/' . $customer_id, array(
+            'headers' => array('Authorization' => 'Bearer ' . $stripe_secret_key)
+        ));
+
+        if (is_wp_error($customer_response)) {
+            wp_send_json_error(array('message' => 'Could not connect to Stripe.'));
+            return;
+        }
+
+        $customer_body = json_decode(wp_remote_retrieve_body($customer_response), true);
+        $email = isset($customer_body['email']) ? $customer_body['email'] : '';
+
+        if (empty($email)) {
+            wp_send_json_error(array('message' => 'No email found for this customer.'));
+            return;
+        }
+
+        $kit_url = 'https://api.convertkit.com/v3/subscribers?api_secret=' . $kit_api_secret . '&email_address=' . urlencode($email);
+        $kit_response = wp_remote_get($kit_url);
+
+        if (is_wp_error($kit_response)) {
+            wp_send_json_error(array('message' => 'Could not connect to Kit.'));
+            return;
+        }
+
+        $kit_body = json_decode(wp_remote_retrieve_body($kit_response), true);
+        $has_tag = false;
+
+        if (!empty($kit_body['subscribers'][0]['tags'])) {
+            foreach ($kit_body['subscribers'][0]['tags'] as $tag) {
+                if ((string)$tag['id'] === $tag_id) {
+                    $has_tag = true;
+                    break;
+                }
+            }
+        }
+
+        wp_send_json_success(array('has_tag' => $has_tag));
+    }
+
+    public function upsell_logic_shortcode($atts) {
+        $atts = shortcode_atts(array(
+            'amount' => '',
+            'product_id' => '',
+            'product_name' => '',
+            'next_url' => '',
+            'check_tag_id' => '', 
+            'skip_url' => ''
+        ), $atts);
+
+        $amount_cents = intval(floatval($atts['amount']) * 100);
+
+        ob_start();
+        ?>
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const customerId = urlParams.get('cus');
+            const yesButton = document.getElementById('upsell-yes');
+            const noButton = document.getElementById('upsell-no');
+            
+            const amount = "<?php echo esc_js($amount_cents); ?>";
+            const productId = "<?php echo esc_js($atts['product_id']); ?>";
+            const productName = "<?php echo esc_js($atts['product_name']); ?>";
+            const nextUrl = "<?php echo esc_url_raw($atts['next_url']); ?>";
+            const checkTagId = "<?php echo esc_js($atts['check_tag_id']); ?>";
+            const skipUrl = "<?php echo esc_url_raw($atts['skip_url']); ?>";
+
+            function routeUser(buttonElement, isPurchase) {
+                if(!customerId) {
+                    alert("Session expired. Please return to the checkout page.");
+                    return;
+                }
+
+                const originalText = buttonElement.innerText;
+                buttonElement.innerText = "Processing...";
+                buttonElement.style.opacity = "0.7";
+                buttonElement.style.pointerEvents = "none";
+
+                let purchasePromise = Promise.resolve({ success: true }); 
+                
+                if (isPurchase) {
+                    const purchaseData = new FormData();
+                    purchaseData.append('action', 'stripe_process_1_click_upsell');
+                    purchaseData.append('customer_id', customerId);
+                    purchaseData.append('amount', amount);
+                    purchaseData.append('product_id', productId);
+                    purchaseData.append('product_name', productName);
+                    
+                    purchasePromise = fetch('/wp-admin/admin-ajax.php', { method: 'POST', body: purchaseData })
+                                      .then(res => res.json());
+                }
+
+                purchasePromise.then(purchaseResult => {
+                    if(!purchaseResult.success) {
+                        alert("Payment failed: " + (purchaseResult.data?.message || "Please check your card."));
+                        buttonElement.innerText = originalText;
+                        buttonElement.style.opacity = "1";
+                        buttonElement.style.pointerEvents = "auto";
+                        return;
+                    }
+
+                    const redirect = (url) => {
+                        const sep = url.includes('?') ? '&' : '?';
+                        window.location.href = url + sep + 'cus=' + customerId;
+                    };
+
+                    // If no tag checking is required, route immediately
+                    if (!checkTagId || checkTagId === '') {
+                        redirect(nextUrl);
+                        return;
+                    }
+
+                    // Otherwise, check ConvertKit tags
+                    const tagCheckData = new FormData();
+                    tagCheckData.append('action', 'check_kit_tag_for_upsell');
+                    tagCheckData.append('customer_id', customerId);
+                    tagCheckData.append('tag_id', checkTagId);
+
+                    fetch('/wp-admin/admin-ajax.php', { method: 'POST', body: tagCheckData })
+                    .then(res => res.json())
+                    .then(tagResult => {
+                        if(tagResult.success && tagResult.data.has_tag === true) {
+                            redirect(skipUrl); // They own it, skip!
+                        } else {
+                            redirect(nextUrl); // They don't own it, send to offer!
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Tag check failed, defaulting to next URL");
+                        redirect(nextUrl);
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("A network error occurred.");
+                    buttonElement.innerText = originalText;
+                    buttonElement.style.opacity = "1";
+                    buttonElement.style.pointerEvents = "auto";
+                });
+            }
+
+            if(noButton) {
+                noButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    routeUser(noButton, false); 
+                });
+            }
+            if(yesButton) {
+                yesButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    routeUser(yesButton, true); 
+                });
+            }
+        });
+        </script>
+        <?php
+        return ob_get_clean();
     }
 
 public static function get_stripe_secret_key() {
