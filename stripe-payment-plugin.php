@@ -832,10 +832,25 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
                     return;
                 }
                 
+                // --- NEW CONFIRMATION LOGIC ---
+                if (isPurchase) {
+                    buttonElement.innerText = "🎉 Success! Loading next step...";
+                    buttonElement.style.backgroundColor = "#d4edda"; // Light green background
+                    buttonElement.style.color = "#155724";           // Dark green text
+                    buttonElement.style.border = "1px solid #c3e6cb";
+                    buttonElement.style.opacity = "1";
+                } else {
+                    buttonElement.innerText = "Loading next step...";
+                }
+                
                 const redirect = (url) => {
                     const sep = url.includes('?') ? '&' : '?';
-                    window.location.href = url + sep + 'cus=' + customerId;
+                    // Added a 1-second delay so they can actually read the success message!
+                    setTimeout(() => {
+                        window.location.href = url + sep + 'cus=' + customerId;
+                    }, 1000); 
                 };
+                // ------------------------------
                 
                 if (!checkTagId || checkTagId === '') {
                     redirect(nextUrl);
@@ -851,11 +866,6 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
                 fetch('/wp-admin/admin-ajax.php', { method: 'POST', body: tagCheckData })
                 .then(res => res.json())
                 .then(tagResult => {
-                    console.log("Kit Tag Check Results:", tagResult); // Print data for debugging
-                    
-                    // ADD THIS LINE TO FREEZE THE SCREEN!
-                    //alert("DEBUG INFO: " + JSON.stringify(tagResult.data, null, 2));
-                    
                     if(!tagResult.success) {
                         console.error("API Error:", tagResult.data.message);
                         redirect(nextUrl); 
