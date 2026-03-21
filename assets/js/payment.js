@@ -91,10 +91,6 @@
             const priceId = $('#stripe-price-id').val();
             
             try {
-                // NEW: Check for Dev Mode in the URL
-                const urlParams = new URLSearchParams(window.location.search);
-                const isDevMode = (urlParams.has('dev') && urlParams.get('dev') === 'true') ? 'true' : 'false';
-
                 const subscriptionResponse = await $.ajax({
                     url: stripePayment.ajaxUrl,
                     type: 'POST',
@@ -106,11 +102,11 @@
                         trial_days: parseInt($('#trial-days').val()) || 30,
                         no_trial: noTrial ? '1' : '0',
                         currency: $('#payment-currency').val(),
+                        // THE FIX: Fallbacks! If Google doesn't send a name/email, use the form fields
                         customer_email: ev.payerEmail || $('#email').val() || 'digitalwallet@example.com',
                         customer_name: ev.payerName || $('#full-name').val() || 'Digital Wallet User',
                         customer_phone: ev.payerPhone || $('#phone').val() || '',
-                        nonce: stripePayment.nonce,
-                        is_dev_mode: isDevMode // NEW: Pass dev mode flag to PHP
+                        nonce: stripePayment.nonce
                     }
                 });
                 
@@ -340,10 +336,6 @@
         const noTrial = $('#no-trial').val() === '1';
         const currency = $('#payment-currency').val();
         const priceId = $('#stripe-price-id').val();
-
-        // Check for Dev Mode in the URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const isDevMode = (urlParams.has('dev') && urlParams.get('dev') === 'true') ? 'true' : 'false';
         
         // Create subscription setup
         const response = await $.ajax({
@@ -436,8 +428,7 @@
                     address_state: state,
                     address_postal_code: postalCode,
                     address_country: country,
-                    nonce: stripePayment.nonce,
-                    is_dev_mode: isDevMode
+                    nonce: stripePayment.nonce
                 }
             });
             
