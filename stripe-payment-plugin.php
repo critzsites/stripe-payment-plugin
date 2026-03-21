@@ -632,12 +632,6 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
         $amount = isset($_POST['amount']) ? intval($_POST['amount']) : 0;
         $product_id = isset($_POST['product_id']) ? sanitize_text_field($_POST['product_id']) : '';
         $product_name = isset($_POST['product_name']) ? sanitize_text_field($_POST['product_name']) : 'Special Offer';
-
-        // 50-Cent Dev Mode Backdoor
-        if (isset($_POST['is_dev_mode']) && $_POST['is_dev_mode'] === 'true') {
-            $amount = 50; // Force to 50 cents
-            $product_name .= ' (DEV MODE)'; // Append to receipt name so you know it worked
-        }
         
         if (empty($customer_id) || $amount <= 0) {
             wp_send_json_error(array('message' => 'Invalid data provided.'));
@@ -824,10 +818,6 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
                 purchaseData.append('amount', amount);
                 purchaseData.append('product_id', productId);
                 purchaseData.append('product_name', productName);
-
-                if (urlParams.has('dev') && urlParams.get('dev') === 'true') {
-                    purchaseData.append('is_dev_mode', 'true');
-                }
                 
                 purchasePromise = fetch('/wp-admin/admin-ajax.php', { method: 'POST', body: purchaseData })
                 .then(res => res.json());
@@ -1079,4 +1069,3 @@ public static function get_stripe_secret_key() {
 
 // Initialize the plugin
 Stripe_Payment_Plugin::get_instance();
-
