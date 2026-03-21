@@ -835,9 +835,9 @@ private function create_or_update_customer($secret_key, $customer_email, $custom
                 // --- NEW CONFIRMATION LOGIC ---
                 if (isPurchase) {
                     buttonElement.innerText = "🎉 Success! Loading next step...";
-                    buttonElement.style.backgroundColor = "#d4edda"; // Light green background
-                    buttonElement.style.color = "#155724";           // Dark green text
-                    buttonElement.style.border = "1px solid #c3e6cb";
+                    buttonElement.style.backgroundColor = "#28a745";
+                    buttonElement.style.color = "#ffffff";
+                    buttonElement.style.border = "none";
                     buttonElement.style.opacity = "1";
                 } else {
                     buttonElement.innerText = "Loading next step...";
