@@ -91,6 +91,11 @@
             const priceId = $('#stripe-price-id').val();
             
             try {
+                // 1. Grab the phone number from Apple/Google OR the form fallback
+                let rawPhone = ev.payerPhone || $('#phone').val() || '';
+                // 2. Instantly scrub out any letters (like "CC")
+                let cleanPhone = rawPhone.replace(/[^\d\+\-\(\)\s]/g, '');
+
                 const subscriptionResponse = await $.ajax({
                     url: stripePayment.ajaxUrl,
                     type: 'POST',
@@ -102,10 +107,12 @@
                         trial_days: parseInt($('#trial-days').val()) || 30,
                         no_trial: noTrial ? '1' : '0',
                         currency: $('#payment-currency').val(),
-                        // THE FIX: Fallbacks! If Google doesn't send a name/email, use the form fields
                         customer_email: ev.payerEmail || $('#email').val() || 'digitalwallet@example.com',
                         customer_name: ev.payerName || $('#full-name').val() || 'Digital Wallet User',
-                        customer_phone: ev.payerPhone || $('#phone').val() || '',
+                        
+                        // 3. Pass the clean, numbers-only phone to your database!
+                        customer_phone: cleanPhone,
+                        
                         nonce: stripePayment.nonce
                     }
                 });
