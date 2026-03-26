@@ -91,9 +91,10 @@
             const priceId = $('#stripe-price-id').val();
             
             try {
-                // 1. Grab the phone number from Apple/Google OR the form fallback
-                let rawPhone = ev.payerPhone || $('#phone').val() || '';
-                // 2. Instantly scrub out any letters (like "CC")
+                // 1. Grab the phone from the FORM first! If blank, fall back to Apple/Google Pay
+                let rawPhone = $('#phone').val() || ev.payerPhone || '';
+                
+                // 2. Instantly scrub out any letters
                 let cleanPhone = rawPhone.replace(/[^\d\+\-\(\)\s]/g, '');
 
                 const subscriptionResponse = await $.ajax({
@@ -107,10 +108,10 @@
                         trial_days: parseInt($('#trial-days').val()) || 30,
                         no_trial: noTrial ? '1' : '0',
                         currency: $('#payment-currency').val(),
-                        customer_email: ev.payerEmail || $('#email').val() || 'digitalwallet@example.com',
-                        customer_name: ev.payerName || $('#full-name').val() || 'Digital Wallet User',
                         
-                        // 3. Pass the clean, numbers-only phone to your database!
+                        // 3. Prioritize the Form fields over Apple Pay for everything!
+                        customer_email: $('#email').val() || ev.payerEmail || 'digitalwallet@example.com',
+                        customer_name: $('#full-name').val() || ev.payerName || 'Digital Wallet User',
                         customer_phone: cleanPhone,
                         
                         nonce: stripePayment.nonce
