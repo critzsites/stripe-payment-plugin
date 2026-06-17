@@ -377,18 +377,23 @@ public function confirm_subscription() {
     }
 
     // Check if this customer already has an active subscription to this product
-    $subs_response = wp_remote_get('https://api.stripe.com/v1/subscriptions?customer=' . $customer_id . '&status=active', array(
-        'headers' => array('Authorization' => 'Bearer ' . $secret_key)
-    ));
-
-    if (!is_wp_error($subs_response)) {
-        $subs_body = json_decode(wp_remote_retrieve_body($subs_response), true);
-        if (!empty($subs_body['data'])) {
-            foreach ($subs_body['data'] as $sub) {
-                foreach ($sub['items']['data'] as $item) {
-                    if ($item['price']['id'] === $price_id) {
-                        wp_send_json_error(array('message' => 'It looks like you are already subscribed! Please check your email or contact support.'));
-                        return; // Stop the transaction immediately
+    // (can be disabled via the "Duplicate Subscription Check" toggle in Settings, for testing)
+    $disable_duplicate_check = get_option('stripe_payment_disable_duplicate_check', '0') === '1';
+ 
+    if (!$disable_duplicate_check) {
+        $subs_response = wp_remote_get('https://api.stripe.com/v1/subscriptions?customer=' . $customer_id . '&status=active', array(
+            'headers' => array('Authorization' => 'Bearer ' . $secret_key)
+        ));
+ 
+        if (!is_wp_error($subs_response)) {
+            $subs_body = json_decode(wp_remote_retrieve_body($subs_response), true);
+            if (!empty($subs_body['data'])) {
+                foreach ($subs_body['data'] as $sub) {
+                    foreach ($sub['items']['data'] as $item) {
+                        if ($item['price']['id'] === $price_id) {
+                            wp_send_json_error(array('message' => 'It looks like you are already subscribed! Please check your email or contact support.'));
+                            return; // Stop the transaction immediately
+                        }
                     }
                 }
             }
