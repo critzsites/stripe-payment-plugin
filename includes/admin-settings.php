@@ -35,6 +35,7 @@ class Stripe_Payment_Admin_Settings {
         register_setting('stripe_payment_settings', 'stripe_payment_subscription_trial_amount');
         register_setting('stripe_payment_settings', 'stripe_payment_subscription_trial_days');
         register_setting('stripe_payment_settings', 'stripe_payment_subscription_annual_amount');
+        register_setting('stripe_payment_settings', 'stripe_payment_disable_duplicate_check');
         
         // Add settings sections
         add_settings_section(
@@ -144,6 +145,14 @@ class Stripe_Payment_Admin_Settings {
             'stripe-payment-settings',
             'stripe_payment_subscription_section'
         );
+
+        add_settings_field(
+            'stripe_payment_disable_duplicate_check',
+            'Duplicate Subscription Check',
+            array($this, 'disable_duplicate_check_field_callback'),
+            'stripe-payment-settings',
+            'stripe_payment_subscription_section'
+        );
     }
     
     public function mode_section_callback() {
@@ -243,6 +252,15 @@ class Stripe_Payment_Admin_Settings {
         <p class="description">Annual subscription amount charged after trial period (e.g., 12.00)</p>
         <?php
     }
+
+    public function disable_duplicate_check_field_callback() {
+        $value = get_option('stripe_payment_disable_duplicate_check', '0');
+        ?>
+        <label>
+            <input type="checkbox" name="stripe_payment_disable_duplicate_check" value="1" <?php checked($value, '1'); ?>>
+            Disable duplicate subscription check (for testing)
+        </label>
+        <p class="description">When checked, customers will NOT be blocked from subscribing again even if they already have an active subscription to the same price. Leave unchecked in production.</p>
     
     public function render_settings_page() {
         if (!current_user_can('manage_options')) {
